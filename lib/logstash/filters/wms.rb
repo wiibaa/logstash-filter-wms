@@ -29,7 +29,8 @@ class LogStash::Filters::Wms < LogStash::Filters::Base
   config :wms_fields, :validate => :array, :default => [
     'service', 'version', 'request', 'layers', 'styles', 'crs', 'srs',
     'bbox', 'width', 'height', 'format', 'transparent', 'bgcolor',
-    'bgcolor', 'exceptions', 'time', 'elevation', 'wfs' 
+    'exceptions', 'time', 'elevation', 'updatesequence', 'query_layers',
+    'info_format', 'feature_count', 'i', 'j', 'x', 'y', 'sld', 'wfs'
   ]
 
   # Specify the field into which Logstash should store the wms data.
