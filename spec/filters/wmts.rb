@@ -1,8 +1,8 @@
-require "test_utils"
+# encoding: utf-8
+require "logstash/devutils/rspec/spec_helper"
 require "logstash/filters/wmts"
 
 describe LogStash::Filters::Wmts do
-  extend LogStash::RSpec
 
   describe "regular calls logged into Varnish logs (apache combined)" do
     config <<-CONFIG
@@ -15,9 +15,10 @@ describe LogStash::Filters::Wmts do
         # accordingly.
         #
         grok {
-          match => [
-            "request", 
-            "(?<wmts.version>([0-9\.]{5}))\/(?<wmts.layer>([a-z0-9\.-]*))\/default\/(?<wmts.release>([0-9]{8}))\/(?<wmts.reference-system>([0-9]*))\/(?<wmts.zoomlevel>([0-9]*))\/(?<wmts.row>([0-9]*))\/(?<wmts.col>([0-9]*))\.(?<wmts.filetype>([a-zA-Z]*))"]
+          match => {
+            #"request" => "(?<[wmts][version]\">([0-9\.]{5}))\/(?<[wmts][layer]>([a-z0-9\.-]*))\/default\/(?<[wmts][release]>([0-9]{8}))\/(?<[wmts][reference-system]>([0-9]*))\/(?<[wmts][zoomlevel]>([0-9]*))\/(?<[wmts][row]>([0-9]*))\/(?<[wmts][col]>([0-9]*))\.(?<[wmts][filetype]>([a-zA-Z]*))"
+            "request" => "https?://%{IPORHOST}/%{DATA:[wmts][version]}/%{DATA:[wmts][layer]}/default/%{POSINT:[wmts][release]}/%{POSINT:[wmts][reference-system]}/%{POSINT:[wmts][zoomlevel]}/%{POSINT:[wmts][row]}/%{POSINT:[wmts][col]}\.%{WORD:[wmts][filetype]}"
+          }
         }
         wmts { }
       }
@@ -30,23 +31,23 @@ describe LogStash::Filters::Wmts do
       '(KHTML, like Gecko) Ubuntu Chromium/31.0.1650.63 Chrome/31.0.1650.63 Safari/537.36"' do
         # checks that the query has been successfully parsed  
         # and the geopoint correctly reprojected into wgs:84 
-        insist { subject["wmts.version"] } == "1.0.0"
-        insist { subject["wmts.layer"] } == "mycustomlayer"
-        insist { subject["wmts.release"] } == "20130213"
-        insist { subject["wmts.reference-system"] } == "21781"
-        insist { subject["wmts.zoomlevel"] } == "23"
-        insist { subject["wmts.row"] } == "470"
-        insist { subject["wmts.col"] } == "561"
-        insist { subject["wmts.filetype"] } == "jpeg"
-        insist { subject["wmts.service"] } == "wmts"
-        insist { subject["wmts.input_epsg"] } == "epsg:21781"
-        insist { subject["wmts.input_x"] } == 707488
-        insist { subject["wmts.input_y"] } == 109104
-        insist { subject["wmts.input_xy"] } == "707488,109104"
-        insist { subject["wmts.output_epsg"] } == "epsg:4326"
-        insist { subject["wmts.output_xy"] } == "8.829295858079231,46.12486163053951"
-        insist { subject["wmts.output_x"] } == 8.829295858079231
-        insist { subject["wmts.output_y"] } == 46.12486163053951
+        insist { subject["[wmts][version]"] } == "1.0.0"
+        insist { subject["[wmts][layer]"] } == "mycustomlayer"
+        insist { subject["[wmts][release]"] } == "20130213"
+        insist { subject["[wmts][reference-system]"] } == "21781"
+        insist { subject["[wmts][zoomlevel]"] } == "23"
+        insist { subject["[wmts][row]"] } == "470"
+        insist { subject["[wmts][col]"] } == "561"
+        insist { subject["[wmts][filetype]"] } == "jpeg"
+        insist { subject["[wmts][service]"] } == "wmts"
+        insist { subject["[wmts][input_epsg]"] } == "epsg:21781"
+        insist { subject["[wmts][input_x]"] } == 707488
+        insist { subject["[wmts][input_y]"] } == 109104
+        insist { subject["[wmts][input_xy]"] } == "707488,109104"
+        insist { subject["[wmts][output_epsg]"] } == "epsg:4326"
+        insist { subject["[wmts][output_xy]"] } == "8.829295858079231,46.12486163053951"
+        insist { subject["[wmts][output_x]"] } == 8.829295858079231
+        insist { subject["[wmts][output_y]"] } == 46.12486163053951
       end
 
     # query extracted from a varnish log, but not matching a wmts request
@@ -62,7 +63,7 @@ describe LogStash::Filters::Wmts do
       'mycustomlayer/default/12345678////.raw HTTP/1.1" 200 2114 ' \
       '"http://localhost//" "ozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36' \
       '(KHTML, like Gecko) Ubuntu Chromium/31.0.1650.63 Chrome/31.0.1650.63 Safari/537.36"' do
-         insist { subject['wmts.errmsg'].start_with?("Bad parameter received") }
+         insist { subject['[wmts][errmsg]'].start_with?("Bad parameter received") }
     end
 
     # query looking like a legit wmts log but actually contains garbage
@@ -71,7 +72,7 @@ describe LogStash::Filters::Wmts do
       'mycustomlayer/default/20130213/99999999/23/470/561.jpeg HTTP/1.1" 200 2114 ' \
       '"http://localhost//" "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36' \
       '(KHTML, like Gecko) Ubuntu Chromium/31.0.1650.63 Chrome/31.0.1650.63 Safari/537.36"' do
-         insist { subject['wmts.errmsg'] } == "Unable to reproject tile coordinates"
+         insist { subject['[wmts][errmsg]'] } == "Unable to reproject tile coordinates"
     end
   end
 
@@ -80,9 +81,10 @@ describe LogStash::Filters::Wmts do
       filter {
         grok { match => [ "message", "%{COMBINEDAPACHELOG}" ] }
         grok {
-          match => [
-            "request", 
-            "(?<wmts.version>([0-9\.]{5}))\/(?<wmts.layer>([a-z0-9\.-]*))\/default\/(?<wmts.release>([0-9]*))\/(?<wmts.reference-system>([a-z0-9]*))\/(?<wmts.zoomlevel>([0-9]*))\/(?<wmts.row>([0-9]*))\/(?<wmts.col>([0-9]*))\.(?<wmts.filetype>([a-zA-Z]*))"]
+          match => {
+            # "request" => "(?<wmts.version>([0-9\.]{5}))\/(?<wmts.layer>([a-z0-9\.-]*))\/default\/(?<wmts.release>([0-9]*))\/(?<wmts.reference-system>([a-z0-9]*))\/(?<wmts.zoomlevel>([0-9]*))\/(?<wmts.row>([0-9]*))\/(?<wmts.col>([0-9]*))\.(?<wmts.filetype>([a-zA-Z]*))"
+            "request" => "https?://%{IPORHOST}/%{DATA:[wmts][version]}/%{DATA:[wmts][layer]}/default/%{POSINT:[wmts][release]}/%{DATA:[wmts][reference-system]}/%{POSINT:[wmts][zoomlevel]}/%{POSINT:[wmts][row]}/%{POSINT:[wmts][col]}\.%{WORD:[wmts][filetype]}"
+          }
         }
         wmts { epsg_mapping => { 'swissgrid' => 21781 } }
       }
@@ -90,45 +92,46 @@ describe LogStash::Filters::Wmts do
 
     # regular query needing a mapping
     sample '11.12.13.14 - - [10/Feb/2014:16:27:26 +0100] "GET http://tile1.wmts.example.org/1.0.0/grundkarte/default/2013/swissgrid/9/371/714.png HTTP/1.1" 200 8334 "http://example.org" "Mozilla/5.0 (Windows NT 6.1; rv:26.0) Gecko/20100101 Firefox/26.0"' do
-      insist { subject["wmts.version"] } == "1.0.0"
-      insist { subject["wmts.layer"] } == "grundkarte"
-      insist { subject["wmts.release"] } == "2013"
-      insist { subject["wmts.reference-system"] } == "swissgrid"
-      insist { subject["wmts.zoomlevel"] } == "9"
-      insist { subject["wmts.row"] } == "371"
-      insist { subject["wmts.col"] } == "714"
-      insist { subject["wmts.filetype"] } == "png"
-      insist { subject["wmts.service"] } == "wmts"
+      puts subject.to_hash
+      insist { subject["[wmts][version]"] } == "1.0.0"
+      insist { subject["[wmts][layer]"] } == "grundkarte"
+      insist { subject["[wmts][release]"] } == "2013"
+      insist { subject["[wmts][reference-system]"] } == "swissgrid"
+      insist { subject["[wmts][zoomlevel]"] } == "9"
+      insist { subject["[wmts][row]"] } == "371"
+      insist { subject["[wmts][col]"] } == "714"
+      insist { subject["[wmts][filetype]"] } == "png"
+      insist { subject["[wmts][service]"] } == "wmts"
       # it should have been correctly mapped
-      insist { subject["wmts.input_epsg"] } == "epsg:21781"
-      insist { subject["wmts.input_x"] } == 320516000
-      insist { subject["wmts.input_y"] } == -166082000
-      insist { subject["wmts.input_xy"] } == "320516000,-166082000"
-      insist { subject["wmts.output_epsg"] } == "epsg:4326"
-      insist { subject["wmts.output_xy"] } == "7.438691675813199,-43.38015041464443"
-      insist { subject["wmts.output_x"] } == 7.438691675813199
-      insist { subject["wmts.output_y"] } == -43.38015041464443
+      insist { subject["[wmts][input_epsg]"] } == "epsg:21781"
+      insist { subject["[wmts][input_x]"] } == 320516000
+      insist { subject["[wmts][input_y]"] } == -166082000
+      insist { subject["[wmts][input_xy]"] } == "320516000,-166082000"
+      insist { subject["[wmts][output_epsg]"] } == "epsg:4326"
+      insist { subject["[wmts][output_xy]"] } == "7.438691675813199,-43.38015041464443"
+      insist { subject["[wmts][output_x]"] } == 7.438691675813199
+      insist { subject["[wmts][output_y]"] } == -43.38015041464443
     end
  
     # regular query which does not need a mapping
     sample '11.12.13.14 - - [10/Feb/2014:16:27:26 +0100] "GET http://tile1.wmts.example.org/1.0.0/grundkarte/default/2013/21781/9/371/714.png HTTP/1.1" 200 8334 "http://example.org" "Mozilla/5.0 (Windows NT 6.1; rv:26.0) Gecko/20100101 Firefox/26.0"' do
-      insist { subject["wmts.version"] } == "1.0.0"
-      insist { subject["wmts.layer"] } == "grundkarte"
-      insist { subject["wmts.release"] } == "2013"
-      insist { subject["wmts.reference-system"] } == "21781"
-      insist { subject["wmts.zoomlevel"] } == "9"
-      insist { subject["wmts.row"] } == "371"
-      insist { subject["wmts.col"] } == "714"
-      insist { subject["wmts.filetype"] } == "png"
-      insist { subject["wmts.service"] } == "wmts"
-      insist { subject["wmts.input_epsg"] } == "epsg:21781"
-      insist { subject["wmts.input_x"] } == 320516000
-      insist { subject["wmts.input_y"] } == -166082000
-      insist { subject["wmts.input_xy"] } == "320516000,-166082000"
-      insist { subject["wmts.output_epsg"] } == "epsg:4326"
-      insist { subject["wmts.output_xy"] } == "7.438691675813199,-43.38015041464443"
-      insist { subject["wmts.output_x"] } == 7.438691675813199
-      insist { subject["wmts.output_y"] } == -43.38015041464443
+      insist { subject["[wmts][version]"] } == "1.0.0"
+      insist { subject["[wmts][layer]"] } == "grundkarte"
+      insist { subject["[wmts][release]"] } == "2013"
+      insist { subject["[wmts][reference-system]"] } == "21781"
+      insist { subject["[wmts][zoomlevel]"] } == "9"
+      insist { subject["[wmts][row]"] } == "371"
+      insist { subject["[wmts][col]"] } == "714"
+      insist { subject["[wmts][filetype]"] } == "png"
+      insist { subject["[wmts][service]"] } == "wmts"
+      insist { subject["[wmts][input_epsg]"] } == "epsg:21781"
+      insist { subject["[wmts][input_x]"] } == 320516000
+      insist { subject["[wmts][input_y]"] } == -166082000
+      insist { subject["[wmts][input_xy]"] } == "320516000,-166082000"
+      insist { subject["[wmts][output_epsg]"] } == "epsg:4326"
+      insist { subject["[wmts][output_xy]"] } == "7.438691675813199,-43.38015041464443"
+      insist { subject["[wmts][output_x]"] } == 7.438691675813199
+      insist { subject["[wmts][output_y]"] } == -43.38015041464443
     end
   end
   describe "Testing a custom grid sent as parameter to the filter" do
@@ -136,9 +139,10 @@ describe LogStash::Filters::Wmts do
       filter {
         grok { match => [ "message", "%{COMBINEDAPACHELOG}" ] }
         grok {
-          match => [
-            "request", 
-            "(?<wmts.version>([0-9\.]{5}))\/(?<wmts.layer>([a-z0-9\.-]*))\/default\/(?<wmts.release>([0-9]*))\/(?<wmts.reference-system>([a-z0-9]*))\/(?<wmts.zoomlevel>([0-9]*))\/(?<wmts.row>([0-9]*))\/(?<wmts.col>([0-9]*))\.(?<wmts.filetype>([a-zA-Z]*))"]
+          match => {
+            #"request" => "(?<wmts.version>([0-9\.]{5}))\/(?<wmts.layer>([a-z0-9\.-]*))\/default\/(?<wmts.release>([0-9]*))\/(?<wmts.reference-system>([a-z0-9]*))\/(?<wmts.zoomlevel>([0-9]*))\/(?<wmts.row>([0-9]*))\/(?<wmts.col>([0-9]*))\.(?<wmts.filetype>([a-zA-Z]*))"
+            "request" => "https?://%{IPORHOST}/%{DATA:[wmts][version]}/%{DATA:[wmts][layer]}/default/%{POSINT:[wmts][release]}/%{DATA:[wmts][reference-system]}/%{POSINT:[wmts][zoomlevel]}/%{POSINT:[wmts][row]}/%{POSINT:[wmts][col]}\.%{WORD:[wmts][filetype]}"
+          }
         }
         wmts { 
           epsg_mapping => { 'swissgrid' => 21781 }
@@ -152,24 +156,23 @@ describe LogStash::Filters::Wmts do
     CONFIG
 
     sample '1.2.3.4 - - [10/Feb/2014:18:06:12 +0100] "GET http://tile1.example.net/1.0.0/ortho/default/2013/swissgrid/9/374/731.jpeg HTTP/1.1" 200 13872 "http://example.net" "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/28.0.1500.52 Safari/537.36"' do
-      insist { subject["wmts.version"] } == "1.0.0"
-      insist { subject["wmts.layer"] } == "ortho"
-      insist { subject["wmts.release"] } == "2013"
-      insist { subject["wmts.reference-system"] } == "swissgrid"
-      insist { subject["wmts.zoomlevel"] } == "9"
-      insist { subject["wmts.row"] } == "374"
-      insist { subject["wmts.col"] } == "731"
-      insist { subject["wmts.filetype"] } == "jpeg"
-      insist { subject["wmts.service"] } == "wmts"
-      insist { subject["wmts.input_epsg"] } == "epsg:21781"
-      insist { subject["wmts.input_x"] } == 700896
-      insist { subject["wmts.input_y"] } == 206192
-      insist { subject["wmts.input_xy"] } == "700896,206192"
-      insist { subject["wmts.output_epsg"] } == "epsg:4326"
-      insist { subject["wmts.output_xy"] } == "8.765263559441715,46.999112812287045"
-      insist { subject["wmts.output_x"] } == 8.765263559441715
-      insist { subject["wmts.output_y"] } == 46.999112812287045
+      insist { subject["[wmts][version]"] } == "1.0.0"
+      insist { subject["[wmts][layer]"] } == "ortho"
+      insist { subject["[wmts][release]"] } == "2013"
+      insist { subject["[wmts][reference-system]"] } == "swissgrid"
+      insist { subject["[wmts][zoomlevel]"] } == "9"
+      insist { subject["[wmts][row]"] } == "374"
+      insist { subject["[wmts][col]"] } == "731"
+      insist { subject["[wmts][filetype]"] } == "jpeg"
+      insist { subject["[wmts][service]"] } == "wmts"
+      insist { subject["[wmts][input_epsg]"] } == "epsg:21781"
+      insist { subject["[wmts][input_x]"] } == 700896
+      insist { subject["[wmts][input_y]"] } == 206192
+      insist { subject["[wmts][input_xy]"] } == "700896,206192"
+      insist { subject["[wmts][output_epsg]"] } == "epsg:4326"
+      insist { subject["[wmts][output_xy]"] } == "8.765263559441715,46.999112812287045"
+      insist { subject["[wmts][output_x]"] } == 8.765263559441715
+      insist { subject["[wmts][output_y]"] } == 46.999112812287045
     end
   end
 end
-

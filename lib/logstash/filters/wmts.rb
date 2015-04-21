@@ -1,3 +1,4 @@
+# encoding: utf-8
 require "logstash/filters/base"
 require "logstash/namespace"
 
@@ -31,73 +32,59 @@ require "logstash/namespace"
 #  }
 #
 # By default, the filter is configured to parse requests made on WMTS servers
-# configured with the Swisstopo WMTS grid, but this can be customized, by
-# setting the following parameters:
+# configured with the Swisstopo WMTS grid, but this can be customized through 
+# the `x_origin`,`y_origin`,`tile_width`,`tile_height` and `resolutions` parameters.
 #
-# - x_origin: the abscissa origin of the grid 
-# - y_origin: the ordinate origin of the grid
-# - tile_width: the width of the produced image tiles
-# - tile_height: the height of the image tiles
-# - resolutions: the array of resolutions for this wmts grid
-# 
-# Additionnally, the following parameters can be set:
-#
-# - prefix: the prefix used on the added variables, by default 'wmts.'
-# - output_epsg: the output projection, classical one by default (lat/lon /
-#   epsg:4326)
-# - zoomlevel_field: the name of the field where the filter can find the
-#   previously extracted zoomlevel, defaults to 'wmts.zoomlevel'
-# - column_field: same for column, defaults to 'wmts.col'
-# - row_field: same, defaults to 'wmts.row'
-# - refsys_field: same, defaults to 'wmts.reference-system'
-#   Note: if the reference system is different from the output_epsg, a
-#   reprojection of the coordinates will take place.
-# - epsg_mapping: sometimes, the reference-system can be given as a string
-#   ('swissgrid' for instance). This parameter allows to set a mapping between
-#   a regular name and the epsg number of a projection, e.g.:
-#   { 'swissgrid' => 21781 }
-#
-
 class LogStash::Filters::Wmts < LogStash::Filters::Base
 
   config_name "wmts"
-  milestone 3
 
-
-  # WMTS grid configuration (by default, it is set to Swisstopo's WMTS grid)
-  # x_origin
+  # Specify the abscissa origin of the WMTS grid
+  #(by default, it is set to Swisstopo's WMTS grid)
   config :x_origin, :validate => :number, :default => 420000
-  # y_origin
+  
+  # Specify the ordinate origin of the WMTS
+  #(by default, it is set to Swisstopo's WMTS grid)
   config :y_origin, :validate => :number, :default => 350000
-  # tile_width
+  
+  # Specify the width of the produced image tiles
   config :tile_width, :validate => :number, :default => 256
-  # tile_height
+
+  # Specify the height of the produced image tiles
   config :tile_height, :validate => :number, :default => 256
-  # resolutions
+  
+  # Specify the array of resolutions for this WMTS grid
   config :resolutions, :validate => :array, :default => [ 4000, 3750, 3500, 3250, 3000, 2750, 2500, 2250, 2000,
         1750, 1500, 1250, 1000, 750, 650, 500, 250, 100, 50, 20, 10, 5, 2.5, 2, 1.5, 1, 0.5, 0.25, 0.1 ]
 
-  # configures the prefix
-  config :prefix, :validate => :string, :default => "#{config_name}."
+  # Specify the field into which Logstash should store the wms data.
+  config :target, :validate => :string, :default => "wmts"
 
-  # configures the output projection
+  # Specify the output projection to be used when setting the x/y
+  # coordinates, default to regular lat/long wgs84 ('epsg:4326')
   config :output_epsg, :validate => :string, :default => "epsg:4326"
 
-  # configures the name of the field for the WMTS zoomlevel
-  config :zoomlevel_field, :validate => :string, :default => "wmts.zoomlevel"
+  # Specify the name of the field where the filter can find the WMTS zoomlevel
+  config :zoomlevel_field, :validate => :string, :default => "[wmts][zoomlevel]"
 
-  # configures the name of the field for the column
-  config :column_field, :validate => :string, :default => "wmts.col"
+  # Specify the name of the field where the filter can find the WMTS column
+  config :column_field, :validate => :string, :default => "[wmts][col]"
 
-  # configures the name of the field for the row
-  config :row_field, :validate => :string, :default => "wmts.row"
+  # Specify the name of the field where the filter can find the WMTS row
+  config :row_field, :validate => :string, :default => "[wmts][row]"
 
-  # configures the name of the field for the reference system
-  config :refsys_field, :validate => :string, :default => "wmts.reference-system"
+  # Specify the name of the field where the filter can find the WMTS reference system
+  # Note: if the reference system is different from the output_epsg, 
+  # a reprojection of the coordinates will take place.
+  config :refsys_field, :validate => :string, :default => "[wmts][reference-system]"
   
-  # configures a mapping between named projections and their actual EPSG code.
-  # Some production WMTS use a regular name instead of a numerical value for
-  # the projection code. This parameter allows to define a custom mapping
+  # Specify mapping between named projections and their actual EPSG code.
+  # Sometimes, the reference-system can be given as a string ('swissgrid' for instance). 
+  # This parameter allows to set a mapping between 
+  # a regular name and the epsg number of a projection, e.g.:
+  # [source;ruby]
+  #   { "swissgrid" => 21781 }
+  #
   config :epsg_mapping, :validate => :hash, :default => {} 
 
   public
@@ -120,8 +107,7 @@ class LogStash::Filters::Wmts < LogStash::Filters::Base
       resolution = @resolutions[zoomlevel]
       raise ArgumentError if resolution.nil?
     rescue ArgumentError, TypeError, NoMethodError
-      event["#{@prefix}errmsg"] = "Bad parameter received from upstream filter"
-      filter_matched(event)
+      event["[#{@target}][errmsg]"] = "Bad parameter received from upstream filter"
       return
     end
 
@@ -129,34 +115,32 @@ class LogStash::Filters::Wmts < LogStash::Filters::Base
       input_x = @x_origin + (((col+0.5)*@tile_width*resolution).floor)
       input_y = @y_origin - (((row+0.5)*@tile_height*resolution).floor)
 
-      event["#{@prefix}service"] = "wmts"
+      event["[#{@target}][service]"] = "wmts"
 
-      event["#{@prefix}input_epsg"] = input_epsg
-      event["#{@prefix}input_x"] = input_x
-      event["#{@prefix}input_y"] = input_y
+      event["[#{@target}][input_epsg]"] = input_epsg
+      event["[#{@target}][input_x]"] = input_x
+      event["[#{@target}][input_y]"] = input_y
       # add a combined field to the event. used for elaticsearch facets (heatmap!)
-      event["#{@prefix}input_xy"] = "#{input_x},#{input_y}"
+      event["[#{@target}][input_xy]"] = "#{input_x},#{input_y}"
 
       # convert from input_epsg to output_epsg (if necessary)
-      event["#{@prefix}output_epsg"] = @output_epsg
+      event["[#{@target}][output_epsg]"] = @output_epsg
 
       unless input_epsg == @output_epsg
         input_p = GeoScript::Geom::Point.new input_x, input_y
         output_p = GeoScript::Projection.reproject input_p, input_epsg, @output_epsg
-        event["#{@prefix}output_xy"] = "#{output_p.x},#{output_p.y}"
-        event["#{@prefix}output_x"] = output_p.x
-        event["#{@prefix}output_y"] = output_p.y
+        event["[#{@target}][output_xy]"] = "#{output_p.x},#{output_p.y}"
+        event["[#{@target}][output_x]"] = output_p.x
+        event["[#{@target}][output_y]"] = output_p.y
       else
         # no reprojection needed
-        event["#{@prefix}output_xy"] = "#{input_x},#{input_y}"
-        event["#{@prefix}output_x"] = input_x
-        event["#{@prefix}output_y"] = input_y
+        event["[#{@target}][output_xy]"] = "#{input_x},#{input_y}"
+        event["[#{@target}][output_x]"] = input_x
+        event["[#{@target}][output_y]"] = input_y
       end
     rescue 
-      event["#{@prefix}errmsg"] = "Unable to reproject tile coordinates"
+      event["[#{@target}][errmsg]"] = "Unable to reproject tile coordinates"
     end
-    # filter matched => make changes persistent
     filter_matched(event)
-
   end # def filter
 end
