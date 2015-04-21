@@ -16,19 +16,18 @@ require "logstash/namespace"
 # http://wmts4.geo.admin.ch/1.0.0/ch.swisstopo.pixelkarte-farbe/default/20130213/21781/23/470/561.jpeg
 #
 # The current filter can be configured as follows in the configuration file:
-# 
-#  filter { 
-#     # First, waiting for varnish log file formats (combined apache logs)
-#     grok { match => [ "message", "%{COMBINEDAPACHELOG}" ] }
-#     # Then, parameters 
-#     grok {
-#       [ 
-#         "request",
-#         "(?<wmts.version>([0-9\.]{5}))\/(?<wmts.layer>([a-z0-9\.-]*))\/default\/(?<wmts.release>([0-9]*))\/(?<wmts.reference-system>([a-z0-9]*))\/(?<wmts.zoomlevel>([0-9]*))\/(?<wmts.row>([0-9]*))\/(?<wmts.col>([0-9]*))\.(?<wmts.filetype>([a-zA-Z]*))"
-#       ]
+# [source,ruby]
+# filter {
+#   # First, waiting for varnish log file formats (combined apache logs)
+#   grok { match => [ "message", "%{COMBINEDAPACHELOG}" ] }
+#   # Then, parameters
+#   grok {
+#     match => {
+#       "request" => "https?://%{IPORHOST}/%{DATA:[wmts][version]}/%{DATA:[wmts][layer]}/default/%{POSINT:[wmts][release]}/%{DATA:[wmts][reference-system]}/%{POSINT:[wmts][zoomlevel]}/%{POSINT:[wmts][row]}/%{POSINT:[wmts][col]}\.%{WORD:[wmts][filetype]}" 
 #     }
-#     # actually passes the previously parsed message to the wmts plugin
-#     wmts { }
+#   }
+#   # actually passes the previously parsed message to the wmts plugin
+#   wmts { }
 #  }
 #
 # By default, the filter is configured to parse requests made on WMTS servers
